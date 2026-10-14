@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rep Counter</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --text: #15171c;
+    --muted: #6b7280;
+    --border: #e3e6eb;
+    --accent: #2563eb;
+    --accent-soft: rgba(37, 99, 235, 0.12);
+    --good: #16a34a;
+    --warn: #d97706;
+    --bad: #dc2626;
+    --grid: #eceff3;
+    --up: #d97706;
+    --down: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --text: #e8eaee;
+      --muted: #9097a3;
+      --border: #262a33;
+      --accent: #60a5fa;
+      --accent-soft: rgba(96, 165, 250, 0.16);
+      --good: #4ade80;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --grid: #20242c;
+      --up: #fbbf24;
+      --down: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--good); box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.18); }
+  .dot.err { background: var(--bad); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+  button {
+    font: inherit; font-weight: 600; font-size: 14px;
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .grid { display: grid; grid-template-columns: 300px 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px;
+  }
+  .label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+
+  .reps { text-align: center; padding: 28px 18px; }
+  .reps .count {
+    font-size: 120px; font-weight: 700; line-height: 1;
+    font-variant-numeric: tabular-nums; margin: 12px 0 6px;
+    transition: transform 0.15s ease, color 0.15s ease;
+  }
+  .reps .count.bump { transform: scale(1.12); color: var(--accent); }
+  .stage {
+    display: inline-block; margin-top: 8px; padding: 4px 12px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; background: var(--accent-soft); color: var(--accent);
+  }
+
+  .angle-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 18px; }
+  .angle-val { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bar { position: relative; height: 12px; border-radius: 6px; background: var(--grid); margin-top: 10px; overflow: visible; }
+  .bar-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 6px; background: var(--accent); transition: width 0.06s linear; }
+  .tick { position: absolute; top: -4px; bottom: -4px; width: 2px; border-radius: 1px; }
+  .tick.up { background: var(--up); }
+  .tick.down { background: var(--down); }
+  .legend { display: flex; gap: 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+
+  .chart-wrap { position: relative; height: 320px; margin-top: 12px; }
+  canvas { width: 100%; height: 100%; display: block; }
+
+  .lower { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 760px) { .lower { grid-template-columns: 1fr; } }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 4px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .empty { color: var(--muted); font-size: 14px; margin-top: 10px; }
+  .log {
+    margin-top: 10px; height: 160px; overflow-y: auto;
+    font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted);
+  }
+  .notice {
+    display: none; margin-bottom: 16px; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid var(--bad); color: var(--bad); background: var(--panel); font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="notice" id="notice">
+    This browser doesn't support Web Serial. Open this page in Google Chrome or Microsoft Edge.
+  </div>
+
+  <header>
+    <div>
+      <h1>MPU-6050 Rep Counter</h1>
+      <div class="status"><span class="dot" id="dot"></span><span id="statusText">Not connected</span></div>
+    </div>
+    <div class="controls">
+      <button class="primary" id="connectBtn">Connect Arduino</button>
+      <button id="calibrateBtn" disabled title="Hold the start position still for 2 seconds">Recalibrate</button>
+      <button id="newSetBtn" disabled title="Save this set and start counting from zero">Save set &amp; reset</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel reps">
+      <div class="label">Reps</div>
+      <div class="count" id="count">0</div>
+      <div class="stage" id="stage">Waiting for data</div>
+
+      <div class="angle-row">
+        <span class="label">Tilt from start</span>
+        <span class="angle-val" id="angle">--°</span>
+      </div>
+      <div class="bar">
+        <div class="bar-fill" id="barFill"></div>
+        <div class="tick up" id="tickUp"></div>
+        <div class="tick down" id="tickDown"></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--up)"></i>Top <span id="upVal">60</span>°</span>
+        <span><i style="background:var(--down)"></i>Return <span id="downVal">25</span>°</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="label">Angle, last 10 seconds</div>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+    </section>
+  </div>
+
+  <div class="lower">
+    <section class="panel">
+      <div class="label">Saved sets</div>
+      <div class="empty" id="setsEmpty">No sets saved yet. Click "Save set &amp; reset" when you finish a set.</div>
+      <table id="setsTable" hidden>
+        <thead><tr><th>#</th><th>Reps</th><th>Duration</th><th>Finished</th></tr></thead>
+        <tbody id="setsBody"></tbody>
+      </table>
+    </section>
+    <section class="panel">
+      <div class="label">Board messages</div>
+      <div class="log" id="log"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const WINDOW_MS = 10000;   // chart history
+const ANGLE_MAX = 180;
+
+const $ = (id) => document.getElementById(id);
+const state = {
+  port: null, reader: null, writer: null,
+  up: 60, down: 25,
+  reps: 0, angle: null, atTop: false,
+  samples: [],            // {t, angle}
+  repMarks: [],           // timestamps of reps
+  setStart: null,
+  sets: [],
+};
+
+if (!("serial" in navigator)) {
+  $("notice").style.display = "block";
+  $("connectBtn").disabled = true;
+}
+
+function log(msg) {
+  const el = $("log");
+  const line = document.createElement("div");
+  line.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(text, kind) {
+  $("statusText").textContent = text;
+  $("dot").className = "dot" + (kind ? " " + kind : "");
+}
+
+function setConnected(connected) {
+  $("connectBtn").textContent = connected ? "Disconnect" : "Connect Arduino";
+  $("calibrateBtn").disabled = !connected;
+  $("newSetBtn").disabled = !connected;
+}
+
+function updateThresholdUI() {
+  $("upVal").textContent = state.up;
+  $("downVal").textContent = state.down;
+  $("tickUp").style.left = `${(state.up / ANGLE_MAX) * 100}%`;
+  $("tickDown").style.left = `${(state.down / ANGLE_MAX) * 100}%`;
+}
+updateThresholdUI();
+
+function handleLine(line) {
+  if (line.startsWith("#")) {
+    const msg = line.slice(1).trim();
+    const cfg = msg.match(/^config up=([\d.]+) down=([\d.]+)/);
+    if (cfg) {
+      state.up = parseFloat(cfg[1]);
+      state.down = parseFloat(cfg[2]);
+      updateThresholdUI();
+      return;
+    }
+    log(msg);
+    if (/Calibrating/.test(msg)) $("stage").textContent = "Calibrating: hold still";
+    if (/Calibrated/.test(msg)) { state.setStart ??= Date.now(); $("stage").textContent = "Ready"; }
+    if (/not found/.test(msg)) setStatus("Sensor not found", "err");
+    return;
+  }
+
+  const m = line.match(/angle:(-?[\d.]+),reps:(\d+)/);
+  if (!m) return;
+  const angle = parseFloat(m[1]);
+  const reps = parseInt(m[2], 10);
+  const now = performance.now();
+
+  state.angle = angle;
+  state.samples.push({ t: now, angle });
+  while (state.samples.length && now - state.samples[0].t > WINDOW_MS) state.samples.shift();
+
+  if (reps > state.reps) {
+    state.repMarks.push(now);
+    const c = $("count");
+    c.classList.add("bump");
+    setTimeout(() => c.classList.remove("bump"), 180);
+  }
+  state.reps = reps;
+  state.repMarks = state.repMarks.filter((t) => now - t <= WINDOW_MS);
+
+  // Mirror the board's hysteresis so the UI can show which phase you're in.
+  if (angle > state.up) state.atTop = true;
+  else if (angle < state.down) state.atTop = false;
+
+  $("count").textContent = reps;
+  $("angle").textContent = `${angle.toFixed(0)}°`;
+  $("barFill").style.width = `${Math.min(angle, ANGLE_MAX) / ANGLE_MAX * 100}%`;
+  $("stage").textContent = state.atTop ? "Top reached: return to start"
+    : angle > state.down ? "Lifting…" : "At start";
+}
+
+async function readLoop() {
+  const decoder = new TextDecoderStream();
+  const closed = state.port.readable.pipeTo(decoder.writable).catch(() => {});
+  state.reader = decoder.readable.getReader();
+  let buffer = "";
+  try {
+    while (true) {
+      const { value, done } = await state.reader.read();
+      if (done) break;
+      buffer += value;
+      let idx;
+      while ((idx = buffer.indexOf("\n")) >= 0) {
+        handleLine(buffer.slice(0, idx).trim());
+        buffer = buffer.slice(idx + 1);
+      }
+    }
+  } catch (err) {
+    log(`Read error: ${err.message}`);
+  } finally {
+    state.reader.releaseLock();
+    await closed;
+  }
+}
+
+async function connect() {
+  try {
+    state.port = await navigator.serial.requestPort({
+      filters: [{ usbVendorId: 0x2341 }, { usbVendorId: 0x2a03 }, { usbVendorId: 0x1a86 }],
+    });
+    await state.port.open({ baudRate: 115200 });
+  } catch (err) {
+    if (err.name !== "NotFoundError") { setStatus(`Could not open port: ${err.message}`, "err"); }
+    state.port = null;
+    return;
+  }
+  const enc = new TextEncoderStream();
+  enc.readable.pipeTo(state.port.writable).catch(() => {});
+  state.writer = enc.writable.getWriter();
+
+  state.reps = 0;
+  state.setStart = null;
+  setStatus("Connected (board restarts and calibrates)", "on");
+  setConnected(true);
+  log("Connected. Hold the start position still.");
+  readLoop().then(() => { if (state.port) disconnect(true); });
+}
+
+async function disconnect(lost = false) {
+  const port = state.port;
+  state.port = null;
+  try { await state.reader?.cancel(); } catch {}
+  try { await state.writer?.close(); } catch {}
+  try { await port?.close(); } catch {}
+  setConnected(false);
+  setStatus(lost ? "Connection lost" : "Not connected", lost ? "err" : "");
+  log(lost ? "Board disconnected." : "Disconnected.");
+}
+
+async function send(cmd) {
+  if (state.writer) await state.writer.write(cmd);
+}
+
+function saveSetAndReset() {
+  if (state.reps > 0) {
+    const end = Date.now();
+    state.sets.push({
+      reps: state.reps,
+      duration: state.setStart ? Math.round((end - state.setStart) / 1000) : null,
+      finished: new Date(end),
+    });
+    renderSets();
+  }
+  state.setStart = Date.now();
+  state.repMarks = [];
+  send("r");
+}
+
+function renderSets() {
+  $("setsEmpty").hidden = state.sets.length > 0;
+  $("setsTable").hidden = state.sets.length === 0;
+  $("setsBody").innerHTML = state.sets.map((s, i) => {
+    const dur = s.duration == null ? "--" : `${Math.floor(s.duration / 60)}:${String(s.duration % 60).padStart(2, "0")}`;
+    return `<tr><td>${i + 1}</td><td>${s.reps}</td><td>${dur}</td><td>${s.finished.toLocaleTimeString()}</td></tr>`;
+  }).join("");
+}
+
+$("connectBtn").onclick = () => (state.port ? disconnect() : connect());
+$("calibrateBtn").onclick = () => send("c");
+$("newSetBtn").onclick = saveSetAndReset;
+navigator.serial?.addEventListener("disconnect", (e) => {
+  if (state.port && e.target === state.port) disconnect(true);
+});
+
+// ---- Chart ----
+const canvas = $("chart");
+const ctx = canvas.getContext("2d");
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+    canvas.width = w * dpr; canvas.height = h * dpr;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const padL = 36, padR = 8, padT = 8, padB = 22;
+  const pw = w - padL - padR, ph = h - padT - padB;
+  const now = performance.now();
+  const yMax = Math.max(120, Math.ceil((Math.max(state.up, ...state.samples.map((s) => s.angle)) + 15) / 30) * 30);
+  const x = (t) => padL + pw * (1 - (now - t) / WINDOW_MS);
+  const y = (a) => padT + ph * (1 - a / yMax);
+
+  // Grid
+  ctx.font = "11px -apple-system, sans-serif";
+  ctx.fillStyle = cssVar("--muted");
+  ctx.strokeStyle = cssVar("--grid");
+  ctx.lineWidth = 1;
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let a = 0; a <= yMax; a += 30) {
+    ctx.beginPath(); ctx.moveTo(padL, y(a)); ctx.lineTo(w - padR, y(a)); ctx.stroke();
+    ctx.fillText(`${a}°`, padL - 6, y(a));
+  }
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let s = 10; s >= 0; s -= 2) ctx.fillText(s ? `-${s}s` : "now", padL + pw * (1 - s / 10), h - padB + 6);
+
+  // Thresholds
+  ctx.setLineDash([5, 5]); ctx.lineWidth = 1.5;
+  [[state.up, "--up"], [state.down, "--down"]].forEach(([a, c]) => {
+    ctx.strokeStyle = cssVar(c);
+    ctx.beginPath(); ctx.moveTo(padL, y(a)); ctx.lineTo(w - padR, y(a)); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  // Rep markers
+  ctx.strokeStyle = cssVar("--accent-soft");
+  ctx.lineWidth = 6;
+  state.repMarks.forEach((t) => { ctx.beginPath(); ctx.moveTo(x(t), padT); ctx.lineTo(x(t), padT + ph); ctx.stroke(); });
+
+  // Angle line
+  if (state.samples.length > 1) {
+    ctx.strokeStyle = cssVar("--accent");
+    ctx.lineWidth = 2.25; ctx.lineJoin = "round";
+    ctx.beginPath();
+    state.samples.forEach((s, i) => (i ? ctx.lineTo(x(s.t), y(s.angle)) : ctx.moveTo(x(s.t), y(s.angle))));
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = cssVar("--muted");
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "14px -apple-system, sans-serif";
+    ctx.fillText(state.port ? "Waiting for data…" : "Connect the Arduino to start", padL + pw / 2, padT + ph / 2);
+  }
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
